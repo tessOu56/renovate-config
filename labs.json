@@ -1,0 +1,19 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Labs repos: same update policy as default, without automerge",
+  "extends": ["./default.json"],
+  "automerge": false,
+  "lockFileMaintenance": {
+    "automerge": false
+  },
+  "vulnerabilityAlerts": {
+    "automerge": false
+  },
+  "packageRules": [
+    {
+      "description": "Labs: never automerge",
+      "matchPackageNames": ["*"],
+      "automerge": false
+    }
+  ]
+}

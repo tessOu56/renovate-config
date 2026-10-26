@@ -1,0 +1,153 @@
+name: Deps track guard
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: "Limit the check to this directory (default: repository root)"
+        type: string
+        required: false
+        default: "."
+
+permissions:
+  contents: read
+
+jobs:
+  deps-track:
+    name: Deps track
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fail if a feature branch changes dependency versions
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          WORKDIR: ${{ inputs.working-directory }}
+        run: |
+          node <<'EOF'
+          const { execFileSync } = require('node:child_process');
+          const path = require('node:path');
+
+          const headRef = process.env.HEAD_REF || '';
+          if (/^(renovate\/|chore\/deps-)/.test(headRef)) {
+            console.log(`Skipping deps-track guard on ${headRef}`);
+            process.exit(0);
+          }
+
+          const baseSha = process.env.BASE_SHA;
+          if (!baseSha) {
+            console.log('No pull request base SHA; skipping');
+            process.exit(0);
+          }
+
+          const workdir = path.posix.normalize(
+            (process.env.WORKDIR || '.').replace(/\\/g, '/')
+          );
+
+          function inScope(file) {
+            const normalized = file.replace(/\\/g, '/');
+            if (!workdir || workdir === '.') return true;
+            return normalized === workdir || normalized.startsWith(`${workdir}/`);
+          }
+
+          function gitShow(sha, file) {
+            try {
+              return execFileSync('git', ['show', `${sha}:${file}`], {
+                encoding: 'utf8',
+                stdio: ['ignore', 'pipe', 'ignore'],
+              });
+            } catch {
+              return null;
+            }
+          }
+
+          const changed = execFileSync(
+            'git',
+            ['diff', '--name-only', '-z', baseSha, 'HEAD'],
+            { encoding: 'utf8' }
+          )
+            .split('\0')
+            .filter(Boolean)
+            .filter(inScope);
+
+          const problems = [];
+
+          for (const file of changed) {
+            if (file === '.nvmrc' || file.endsWith('/.nvmrc')) {
+              const before = (gitShow(baseSha, file) || '').trim();
+              const after = (gitShow('HEAD', file) || '').trim();
+              if (before !== after) {
+                problems.push(`${file}: ${before || '(none)'} -> ${after || '(none)'}`);
+              }
+            }
+
+            if (!file.endsWith('package.json')) continue;
+
+            const beforeRaw = gitShow(baseSha, file);
+            const afterRaw = gitShow('HEAD', file);
+            if (!beforeRaw || !afterRaw) continue;
+
+            let before;
+            let after;
+            try {
+              before = JSON.parse(beforeRaw);
+              after = JSON.parse(afterRaw);
+            } catch (error) {
+              problems.push(`${file}: invalid JSON (${error.message})`);
+              continue;
+            }
+
+            if ((before.packageManager || null) !== (after.packageManager || null)) {
+              problems.push(
+                `${file}: packageManager ${before.packageManager || '(none)'} -> ${after.packageManager || '(none)'}`
+              );
+            }
+
+            const beforeEngine = before.engines && before.engines.node;
+            const afterEngine = after.engines && after.engines.node;
+            if ((beforeEngine || null) !== (afterEngine || null)) {
+              problems.push(
+                `${file}: engines.node ${beforeEngine || '(none)'} -> ${afterEngine || '(none)'}`
+              );
+            }
+
+            for (const field of [
+              'dependencies',
+              'devDependencies',
+              'optionalDependencies',
+              'peerDependencies',
+            ]) {
+              const beforeDeps = before[field] || {};
+              const afterDeps = after[field] || {};
+              for (const name of Object.keys(beforeDeps)) {
+                if (
+                  Object.prototype.hasOwnProperty.call(afterDeps, name) &&
+                  beforeDeps[name] !== afterDeps[name]
+                ) {
+                  problems.push(
+                    `${file}: ${field}.${name} ${beforeDeps[name]} -> ${afterDeps[name]}`
+                  );
+                }
+              }
+            }
+          }
+
+          if (problems.length > 0) {
+            console.error(
+              'Dependency versions must be changed on renovate/* or chore/deps-* branches:'
+            );
+            for (const problem of problems) {
+              console.error(`- ${problem}`);
+            }
+            process.exit(1);
+          }
+
+          console.log('No dependency version changes on this feature branch.');
+          EOF

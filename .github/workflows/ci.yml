@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate presets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # renovate: datasource=npm depName=renovate
+      RENOVATE_VERSION: 44.181.12
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Validate Renovate presets
+        run: >
+          npx --yes --package "renovate@${RENOVATE_VERSION}" --
+          renovate-config-validator --no-global --strict
+          default.json labs.json renovate.json
+
+  actionlint:
+    name: Lint workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      # renovate: datasource=github-releases depName=rhysd/actionlint
+      ACTIONLINT_VERSION: 1.7.12
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install actionlint
+        run: |
+          set -euo pipefail
+          case "$(uname -m)" in
+            x86_64) arch=amd64 ;;
+            aarch64|arm64) arch=arm64 ;;
+            *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+          esac
+          base_url="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}"
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_${arch}.tar.gz"
+          mkdir -p .actionlint
+          curl --fail --silent --show-error --location --output ".actionlint/${archive}" \
+            "${base_url}/${archive}"
+          curl --fail --silent --show-error --location --output .actionlint/checksums.txt \
+            "${base_url}/actionlint_${ACTIONLINT_VERSION}_checksums.txt"
+          (
+            cd .actionlint
+            sha256sum --check --ignore-missing checksums.txt
+            tar --extract --gzip --file "${archive}" actionlint
+          )
+
+      - name: Run actionlint
+        run: .actionlint/actionlint -color
+
+  deps-track:
+    name: Deps track
+    uses: ./.github/workflows/deps-track-guard.yml
+    permissions:
+      contents: read

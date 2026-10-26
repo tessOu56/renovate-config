@@ -1,0 +1,63 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Shared dependency update policy for product repos",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests",
+    "security:minimumReleaseAgeNpm",
+    ":renovatePrefix",
+    ":automergeRequireAllStatusChecks",
+    ":separatePatchReleases",
+    ":separateMajorReleases"
+  ],
+  "labels": ["deps"],
+  "timezone": "Asia/Taipei",
+  "minimumReleaseAge": "3 days",
+  "internalChecksFilter": "strict",
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "automerge": true,
+    "minimumReleaseAge": null,
+    "labels": ["deps"]
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["* 0-6 1 * *"],
+    "automerge": true
+  },
+  "packageRules": [
+    {
+      "description": "Automerge patch, pin, and digest updates after required CI passes",
+      "matchUpdateTypes": ["patch", "pin", "digest"],
+      "automerge": true
+    },
+    {
+      "description": "Never automerge major updates; one package per PR",
+      "matchUpdateTypes": ["major"],
+      "automerge": false
+    },
+    {
+      "description": "Group minor updates into one weekly PR on Monday (Asia/Taipei)",
+      "matchUpdateTypes": ["minor"],
+      "groupName": "minor dependencies",
+      "groupSlug": "minor",
+      "schedule": ["* 0-6 * * 1"],
+      "automerge": false
+    },
+    {
+      "description": "Keep Node.js runtime, engines, .nvmrc, and @types/node aligned; do not propose majors beyond 24",
+      "groupName": "Node.js",
+      "matchDatasources": ["node-version", "npm"],
+      "matchPackageNames": ["node", "@types/node"],
+      "allowedVersions": "<25",
+      "rangeStrategy": "bump"
+    },
+    {
+      "description": "Group pnpm and Corepack packageManager updates; stay on pnpm 11.x",
+      "groupName": "pnpm",
+      "matchPackageNames": ["pnpm"],
+      "allowedVersions": "<12"
+    }
+  ]
+}

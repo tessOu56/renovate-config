@@ -2,15 +2,6 @@
 
 Shared Renovate preset and reusable GitHub Actions workflows for Node.js / pnpm repositories.
 
-## Private repository access
-
-This repository is private. Reuse only works after:
-
-1. **GitHub Actions** — in this repository, set **Settings → Actions → General → Access** to **Accessible from repositories owned by the user**.
-2. **Renovate** — grant the Renovate GitHub App access to this repository so it can read the preset.
-
-Consumer repositories must also have the Renovate app installed (or otherwise run Renovate with a token that can read this repo).
-
 ## Renovate preset
 
 Product repos:
@@ -53,7 +44,7 @@ Create a `deps` label in each consumer repository if it does not already exist.
 
 ## Reusable workflows
 
-Pin the reusable workflow to a commit SHA or tag of this repository (not a moving branch):
+Callers must pin reusable workflows to a full commit SHA of this repository (not a tag or moving branch):
 
 ```yaml
 name: CI
@@ -68,7 +59,7 @@ permissions:
 
 jobs:
   ci:
-    uses: tessOu56/renovate-config/.github/workflows/ci-node.yml@<sha-or-tag>
+    uses: tessOu56/renovate-config/.github/workflows/ci-node.yml@<full commit SHA>
     with:
       command: pnpm test
       audit: true
@@ -76,7 +67,7 @@ jobs:
       # working-directory: .   # optional; default is the repo root
 
   deps-track:
-    uses: tessOu56/renovate-config/.github/workflows/deps-track-guard.yml@<sha-or-tag>
+    uses: tessOu56/renovate-config/.github/workflows/deps-track-guard.yml@<full commit SHA>
 ```
 
 `ci-node.yml` checks out the caller, installs pnpm from `package.json` `packageManager`, sets up Node from `.nvmrc` with the pnpm cache, then runs `pnpm install --frozen-lockfile`, optional `pnpm audit`, and the smoke/test command.

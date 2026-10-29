@@ -58,7 +58,11 @@ jobs:
 
       - name: Audit
         if: ${{ inputs.audit }}
-        run: pnpm audit --audit-level "${{ inputs.audit-level }}"
+        env:
+          AUDIT_LEVEL: ${{ inputs.audit-level }}
+        run: pnpm audit --audit-level "$AUDIT_LEVEL"
 
       - name: Test
-        run: ${{ inputs.command }}
+        env:
+          CMD: ${{ inputs.command }}
+        run: bash -c "$CMD"
